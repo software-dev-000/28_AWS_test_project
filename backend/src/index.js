@@ -1,9 +1,19 @@
 const express = require('express');
 const cors = require('cors');
 const sequelize = require('./config/database');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
+
+// In CommonJS modules, we use __dirname and __filename directly
+// No need to use fileURLToPath and import.meta.url
+const _dirname = __dirname;
+// const _filename = fileURLToPath(import.meta.url);
+// const _dirname = path.dirname(_filename);
+
+app.use(express.static(path.join(_dirname, '../frontend/build')));
 
 // Middleware
 app.use(cors());

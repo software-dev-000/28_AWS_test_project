@@ -1,18 +1,22 @@
 // frontend/src/pages/ProjectDetail.js
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 
 const ProjectDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [images, setImages] = useState([]);
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -21,8 +25,9 @@ const ProjectDetail = () => {
         setProject(response.data);
         setLoading(false);
         
-        // Fetch images for this project
+        // Fetch images and comments for this project
         fetchImages();
+        fetchComments();
       } catch (err) {
         setError('Failed to load project details');
         setLoading(false);
@@ -32,14 +37,23 @@ const ProjectDetail = () => {
     fetchProject();
   }, [id]);
 
-  const fetchImages = useCallback(async () => {
+  const fetchImages = async () => {
     try {
       const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/images/${id}`);
       setImages(response.data);
     } catch (err) {
       console.error('Failed to fetch images:', err);
     }
-  }, [id]);
+  };
+
+  const fetchComments = async () => {
+    try {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/comments/${id}`);
+      setComments(response.data);
+    } catch (err) {
+      console.error('Failed to fetch comments:', err);
+    }
+  };
 
   const handleFileChange = (e) => {
     setSelectedFile(e.target.files[0]);
@@ -95,8 +109,60 @@ const ProjectDetail = () => {
     }
   };
 
+  const handleCommentSubmit = async (e) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    
+    setSubmittingComment(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        `${process.env.REACT_APP_API_URL}/api/comments/${id}`,
+        { content: newComment },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+      
+      // Add the new comment to the comments array
+      setComments([response.data, ...comments]);
+      setNewComment('');
+      setSubmittingComment(false);
+    } catch (err) {
+      setError('Failed to post comment: ' + (err.response?.data?.message || err.message));
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(
+        `${process.env.REACT_APP_API_URL}/api/comments/${id}/${commentId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+      
+      // Remove the deleted comment from the comments array
+      setComments(comments.filter(comment => comment.id !== commentId));
+    } catch (err) {
+      setError('Failed to delete comment: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
   const clearError = () => {
     setError(null);
+  };
+
+  const formatDate = (dateString) => {
+    const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
   if (loading) return <div className="text-center py-10">Loading project details...</div>;
@@ -169,7 +235,7 @@ const ProjectDetail = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <h2 className="text-xl font-semibold mb-4">Project Images</h2>
         {images.length === 0 ? (
           <p className="text-gray-500">No images have been uploaded to this project yet.</p>
@@ -192,6 +258,68 @@ const ProjectDetail = () => {
                       <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
                     </svg>
                   </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-xl font-semibold mb-4">Comments</h2>
+        
+        {user ? (
+          <form onSubmit={handleCommentSubmit} className="mb-6">
+            <div className="mb-4">
+              <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-2">
+                Add a comment
+              </label>
+              <textarea
+                id="comment"
+                rows="3"
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Share your thoughts about this project..."
+                required
+              ></textarea>
+            </div>
+            <button
+              type="submit"
+              disabled={submittingComment || !newComment.trim()}
+              className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              {submittingComment ? 'Posting...' : 'Post Comment'}
+            </button>
+          </form>
+        ) : (
+          <div className="mb-6 p-4 bg-gray-50 rounded-md">
+            <p className="text-gray-600">
+              Please <a href="/login" className="text-blue-600 hover:underline">log in</a> to leave a comment.
+            </p>
+          </div>
+        )}
+        
+        {comments.length === 0 ? (
+          <p className="text-gray-500">No comments yet. Be the first to share your thoughts!</p>
+        ) : (
+          <div className="space-y-4">
+            {comments.map((comment) => (
+              <div key={comment.id} className="bg-gray-50 p-4 rounded-md">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="font-medium">{comment.User?.email || 'Anonymous'}</div>
+                  <div className="text-sm text-gray-500">{formatDate(comment.createdAt)}</div>
+                </div>
+                <p className="text-gray-700">{comment.content}</p>
+                {user && user.id === comment.userId && (
+                  <div className="mt-2 text-right">
+                    <button
+                      onClick={() => handleDeleteComment(comment.id)}
+                      className="text-sm text-red-600 hover:text-red-800"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
